@@ -3,6 +3,7 @@ local argparse = require("argparse")
 local parser = argparse()
 parser:option("--display -d", "Real X server to connect to. Defaults to DISPLAY environment variable.")
 parser:option("--fakedisplay -D", "Fake X server to host. Defaults to FAKEDISPLAY environment variable, or \":9\" if not set.")
+parser:option("--buffer-size", "Maximum number of bytes to read or write at once.", "1024")
 local args = parser:parse()
 local socket = require("posix.sys.socket")
 local unistd = require("posix.unistd")
@@ -20,6 +21,7 @@ if args.fakedisplay == nil then
 	end
 end
 assert(string.find(args.fakedisplay, "^:%d+$") ~= nil)
+local buffer_size = assert(tonumber(args.buffer_size))
 local outbound = assert(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0))
 assert(socket.connect(outbound, {
 	family = socket.AF_UNIX,
@@ -51,10 +53,21 @@ xpcall(function()
 		if client ~= nil then
 			print(string.format("Client connected via %q", client_sockaddr.family))
 			add_nonblock(client)
-			local data = assert(socket.recv(client, 1024))
-			assert(socket.send(outbound, data))
-			data = assert(socket.recv(outbound, 1024))
-			assert(socket.send(client, data))
+			while true do
+				local data, err, err_code = socket.recv(client, buffer_size)
+				if data ~= nil then
+					assert(socket.send(outbound, data))
+				elseif err_code ~= errno.EAGAIN then
+					error(err)
+				end
+				data, err, err_code = socket.recv(outbound, buffer_size)
+				if data ~= nil then
+					assert(socket.send(client, data))
+				elseif err_code ~= errno.EAGAIN then
+					error(err)
+				end
+			end
+			break
 		elseif err_code ~= errno.EAGAIN then
 			error(client_sockaddr)
 		end
