@@ -246,11 +246,11 @@ xpcall(function()
 				if data ~= nil then
 					send(outbound, data)
 					local opcode = string.byte(data)
-					local padding_1 = proxy(client, outbound, 1)
+					proxy(client, outbound, 1)
 					local request_length = proxy_card(client, outbound, 16)*4-4
 					printf("C->S: Request: opcode: %d (0x%02x), request_length: %d\n", opcode, opcode, request_length)
 					assert(request_length >= 0)
-					local data = proxy(client, outbound, request_length)
+					proxy(client, outbound, request_length)
 				elseif err_code ~= errno.EAGAIN then
 					error(err)
 				end
