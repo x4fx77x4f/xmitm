@@ -20,25 +20,17 @@ if args.fakedisplay == nil then
 	end
 end
 assert(string.find(args.fakedisplay, "^:%d+$") ~= nil)
-local outbound = assert(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0))
-assert(socket.connect(outbound, {
-	family = socket.AF_UNIX,
-	path = "/tmp/.X11-unix/X"..string.match(args.display, ":(%d+)$"),
-}))
-local outbound_sockaddr = assert(socket.getsockname(outbound))
 local function fprintf(stream, ...)
 	stream:write(string.format(...))
 end
 local function printf(...)
 	return fprintf(io.stdout, ...)
 end
-printf("Connected to real X server on %q via %q at %q\n", args.display, outbound_sockaddr.family, outbound_sockaddr.path)
 local function add_nonblock(fd)
 	local flags = assert(fcntl.fcntl(fd, fcntl.F_GETFL))
 	flags = bit.bor(flags, fcntl.O_NONBLOCK)
 	assert(fcntl.fcntl(fd, fcntl.F_SETFL, flags))
 end
-add_nonblock(outbound)
 local inbound = assert(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0))
 local path = "/tmp/.X11-unix/X"..string.match(args.fakedisplay, ":(%d+)$")
 unistd.unlink(path)
@@ -136,12 +128,21 @@ end
 local function proxy_card(inbound, outbound, bits)
 	return unpack_card(proxy(inbound, outbound, bits/8), bits)
 end
+local clients = {}
 xpcall(function()
 	while true do
 		local client, client_sockaddr, err_code = socket.accept(inbound)
 		if client ~= nil then
 			printf("Client connected via %q\n", client_sockaddr.family)
 			add_nonblock(client)
+			local outbound = assert(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0))
+			assert(socket.connect(outbound, {
+				family = socket.AF_UNIX,
+				path = "/tmp/.X11-unix/X"..string.match(args.display, ":(%d+)$"),
+			}))
+			local outbound_sockaddr = assert(socket.getsockname(outbound))
+			printf("Connected to real X server on %q via %q at %q\n", args.display, outbound_sockaddr.family, outbound_sockaddr.path)
+			add_nonblock(outbound)
 			local endian = receive(client, 1)
 			if endian == "B" then
 				little_endian = false
@@ -237,7 +238,7 @@ xpcall(function()
 			else
 				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
-			while true do
+			local function tick()
 				local data, err, err_code = socket.recv(client, 1)
 				if data ~= nil and #data == 0 then
 					fprintf(io.stderr, "C->S: bad data length (expected 1, got %d)\n", #data)
@@ -281,9 +282,13 @@ xpcall(function()
 				end
 				--print(os.time())
 			end
-			break
+			clients[#clients+1] = tick
 		elseif err_code ~= errno.EAGAIN then
 			error(client_sockaddr)
+		end
+		for i=1, #clients do
+			local client = clients[i]
+			client()
 		end
 	end
 end, function(err)
@@ -298,7 +303,5 @@ end, function(err)
 	io.stderr:write("\n")
 end)
 printf("Shutting down\n")
-assert(socket.shutdown(outbound, socket.SHUT_RDWR))
 assert(socket.shutdown(inbound, socket.SHUT_RDWR))
-assert(unistd.close(outbound))
 assert(unistd.close(inbound))
