@@ -191,6 +191,8 @@ xpcall(function()
 				send(client, reason)
 				send(client, padding)
 				printf("S->C: Connection setup failed: major: %d, minor: %d, reason: %q\n", major, minor, reason)
+			else
+				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
 			while true do
 				local data, err, err_code = socket.recv(client, buffer_size)
