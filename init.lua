@@ -4,6 +4,7 @@ local parser = argparse()
 parser:option("--display -d", "Real X server to connect to. Defaults to DISPLAY environment variable.")
 parser:option("--fakedisplay -D", "Fake X server to host. Defaults to FAKEDISPLAY environment variable, or \":9\" if not set.")
 parser:flag("--block-error", "Don't send errors to clients.")
+parser:option("--block-error-code", "Don't send errors of a particular type or types to clients."):count("*")
 local args = parser:parse()
 local socket = require("posix.sys.socket")
 local unistd = require("posix.unistd")
@@ -138,6 +139,10 @@ local function proxy_card(inbound, outbound, bits)
 	return unpack_card(proxy(inbound, outbound, bits/8), bits)
 end
 local clients = {}
+local blocked_error_codes = {}
+for i=1, #args.block_error_code do
+	blocked_error_codes[assert(tonumber(args.block_error_code[i]))] = true
+end
 xpcall(function()
 	while true do
 		local client, client_sockaddr, err_code = socket.accept(inbound)
@@ -284,10 +289,15 @@ xpcall(function()
 						local code = string.byte(code_raw)
 						printf("S->C: Error: code: %d (0x%02x)\n", code, code)
 						local data2 = receive(outbound, 30)
-						if not args.block_error then
+						if
+							not args.block_error
+							and not blocked_error_codes[code]
+						then
 							send(client, data)
 							send(client, code_raw)
 							send(client, data2)
+						else
+							printf("Blocking error\n")
 						end
 					elseif data == "\x01" then
 						send(client, data)
