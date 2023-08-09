@@ -12,6 +12,11 @@ Created with the intention of working around a crash in the [s&box](https://sbox
 4. `./init.lua` (to run the proxy)
 5. `DISPLAY=:9 glxgears` (to run the application)
 
+## Extensions
+xmitm implements some extension I don't know the name of that means that if a request has a length of 0, the server will read an additional 4 bytes parsed as CARD32 (unsigned 32-bit integer) and use that as the length instead. If you know the name of this extension, let me know, as I wasn't able to find it.
+
+xmitm implements the [X Generic Event Extension](https://www.x.org/releases/X11R7.6/doc/xextproto/geproto.html) allowing for events that are longer than 32 bytes.
+
 ## License
 To the extent possible under law, the author(s) have dedicated all copyright and related and neighboring rights to this software to the public domain worldwide. This software is distributed without any warranty.
 

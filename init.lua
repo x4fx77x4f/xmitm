@@ -299,8 +299,17 @@ xpcall(function()
 					else
 						send(client, data)
 						local code = string.byte(data)
-						printf("S->C: Event: code: %d (0x%02x)\n", code, code)
-						proxy(outbound, client, 31)
+						if code == 35 then
+							local extension = proxy_card(outbound, client, 8)
+							local sequence_number = proxy_card(outbound, client, 16)
+							local length = proxy_card(outbound, client, 32)
+							local event_type = proxy_card(outbound, client, 16)
+							printf("S->C: Event (GenericEvent): code: %d (0x%02x), extension: %d (0x%02x), sequence_number: %d (0x%04x), length: %d, event_type: %d (0x%04x)\n", code, code, extension, extension, sequence_number, sequence_number, length, event_type, event_type)
+							proxy(outbound, client, 32-(1+1+2+4+2)+length*4)
+						else
+							printf("S->C: Event: code: %d (0x%02x)\n", code, code)
+							proxy(outbound, client, 31)
+						end
 					end
 				elseif err_code ~= errno.EAGAIN then
 					printf("S->C: Receive failure: err: %q, err_code: %d\n", err, err_code)
