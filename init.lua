@@ -94,7 +94,15 @@ local function send(fd, data)
 	if data == "" then
 		return
 	end
-	assert(assert(socket.send(fd, data)) == #data)
+	while true do
+		local sent, err, err_code = socket.send(fd, data)
+		if sent ~= nil then
+			assert(sent == #data)
+			break
+		elseif err_code ~= errno.EAGAIN then
+			error(err)
+		end
+	end
 end
 local function receive(fd, n)
 	if n == 0 then
@@ -304,6 +312,7 @@ xpcall(function()
 		for i=1, #dead do
 			local j = dead[i]
 			local data = clients[j]
+			printf("Shutting down client\n")
 			assert(socket.shutdown(data.client, socket.SHUT_RDWR))
 			assert(socket.shutdown(data.outbound, socket.SHUT_RDWR))
 			assert(unistd.close(data.client))
