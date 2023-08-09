@@ -239,8 +239,11 @@ xpcall(function()
 			end
 			while true do
 				local data, err, err_code = socket.recv(client, 1)
+				if data ~= nil and #data == 0 then
+					fprintf(io.stderr, "C->S: bad data length (expected 1, got %d)\n", #data)
+					data, err, err_code = nil, "bad data length", errno.EAGAIN
+				end
 				if data ~= nil then
-					assert(#data == 1)
 					send(outbound, data)
 					local opcode = string.byte(data)
 					local padding_1 = proxy(client, outbound, 1)
@@ -252,8 +255,11 @@ xpcall(function()
 					error(err)
 				end
 				data, err, err_code = socket.recv(outbound, 1)
+				if data ~= nil and #data == 0 then
+					fprintf(io.stderr, "S->C: bad data length (expected 1, got %d)\n", #data)
+					data, err, err_code = nil, "bad data length", errno.EAGAIN
+				end
 				if data ~= nil then
-					assert(#data == 1)
 					send(client, data)
 					if data == "\x00" then
 						local code = proxy_card(outbound, client, 8)
@@ -273,6 +279,7 @@ xpcall(function()
 				elseif err_code ~= errno.EAGAIN then
 					error(err)
 				end
+				--print(os.time())
 			end
 			break
 		elseif err_code ~= errno.EAGAIN then
