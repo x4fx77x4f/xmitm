@@ -182,15 +182,24 @@ xpcall(function()
 				local additional_length_raw = receive(outbound, 2)
 				local additional_length = unpack_card(additional_length_raw, 16)*4
 				local reason = receive(outbound, reason_length)
-				local padding_length = additional_length*4-reason_length
-				local padding = receive(outbound, padding_length)
+				local padding_1 = receive(outbound, additional_length*4-reason_length)
 				send(client, reason_length_raw)
 				send(client, major_raw)
 				send(client, minor_raw)
 				send(client, additional_length_raw)
 				send(client, reason)
-				send(client, padding)
+				send(client, padding_1)
 				printf("S->C: Connection setup failed: major: %d, minor: %d, reason: %q\n", major, minor, reason)
+			elseif status == "\x02" then
+				local padding_1 = receive(outbound, 5)
+				local additional_length_raw = receive(outbound, 2)
+				local additional_length = unpack_card(additional_length_raw, 16)
+				local additional = receive(outbound, additional_length)
+				local reason = string.gsub(additional, "%z+$", "")
+				send(client, padding_1)
+				send(client, additional_length_raw)
+				send(client, additional)
+				printf("S->C: Connection setup authenticate: reason: %q\n", reason)
 			else
 				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
