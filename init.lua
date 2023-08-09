@@ -257,17 +257,17 @@ xpcall(function()
 					send(client, data)
 					if data == "\x00" then
 						local code = proxy_card(outbound, client, 8)
-						printf("C->S: Error: code: %d (0x%02x)\n", code, code)
+						printf("S->C: Error: code: %d (0x%02x)\n", code, code)
 						proxy(outbound, client, 30)
 					elseif data == "\x01" then
 						proxy(outbound, client, 3)
 						local reply_length = proxy_card(outbound, client, 32)*4
 						proxy(outbound, client, 24)
-						printf("C->S: Reply: reply_length: %d\n", reply_length)
+						printf("S->C: Reply: reply_length: %d\n", reply_length)
 						proxy(outbound, client, reply_length)
 					else
 						local code = string.byte(data)
-						printf("C->S: Event: code: %d (0x%02x)\n", code, code)
+						printf("S->C: Event: code: %d (0x%02x)\n", code, code)
 						proxy(outbound, client, 31)
 					end
 				elseif err_code ~= errno.EAGAIN then
