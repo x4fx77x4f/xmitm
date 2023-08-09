@@ -238,7 +238,7 @@ xpcall(function()
 			else
 				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
-			local function tick()
+			local function func()
 				local data, err, err_code = socket.recv(client, 1)
 				if data ~= nil and #data == 0 then
 					fprintf(io.stderr, "C->S: bad data length (expected 1, got %d)\n", #data)
@@ -253,7 +253,8 @@ xpcall(function()
 					assert(request_length >= 0)
 					proxy(client, outbound, request_length)
 				elseif err_code ~= errno.EAGAIN then
-					error(err)
+					printf("C->S: Receive failure: err: %q, err_code: %d\n", err, err_code)
+					return true
 				end
 				data, err, err_code = socket.recv(outbound, 1)
 				if data ~= nil and #data == 0 then
@@ -278,17 +279,34 @@ xpcall(function()
 						proxy(outbound, client, 31)
 					end
 				elseif err_code ~= errno.EAGAIN then
-					error(err)
+					printf("S->C: Receive failure: err: %q, err_code: %d\n", err, err_code)
+					return true
 				end
 				--print(os.time())
 			end
-			clients[#clients+1] = tick
+			clients[#clients+1] = {
+				func = func,
+				client = client,
+				outbound = outbound,
+			}
 		elseif err_code ~= errno.EAGAIN then
 			error(client_sockaddr)
 		end
+		local dead = {}
 		for i=1, #clients do
-			local client = clients[i]
-			client()
+			local data = clients[i]
+			if data.func() then
+				dead[#dead+1] = i
+			end
+		end
+		for i=1, #dead do
+			local j = dead[i]
+			local data = clients[j]
+			assert(socket.shutdown(data.client, socket.SHUT_RDWR))
+			assert(socket.shutdown(data.outbound, socket.SHUT_RDWR))
+			assert(unistd.close(data.client))
+			assert(unistd.close(data.outbound))
+			table.remove(clients, j)
 		end
 	end
 end, function(err)
