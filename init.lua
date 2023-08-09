@@ -241,8 +241,9 @@ xpcall(function()
 			local function func()
 				local data, err, err_code = socket.recv(client, 1)
 				if data ~= nil and #data == 0 then
-					fprintf(io.stderr, "C->S: bad data length (expected 1, got %d)\n", #data)
+					printf("C->S: bad data length (expected 1, got %d)\n", #data)
 					data, err, err_code = nil, "bad data length", errno.EAGAIN
+					return true
 				end
 				if data ~= nil then
 					send(outbound, data)
@@ -258,8 +259,9 @@ xpcall(function()
 				end
 				data, err, err_code = socket.recv(outbound, 1)
 				if data ~= nil and #data == 0 then
-					fprintf(io.stderr, "S->C: bad data length (expected 1, got %d)\n", #data)
+					printf("S->C: bad data length (expected 1, got %d)\n", #data)
 					data, err, err_code = nil, "bad data length", errno.EAGAIN
+					return true
 				end
 				if data ~= nil then
 					send(client, data)
