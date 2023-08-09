@@ -3,6 +3,7 @@ local argparse = require("argparse")
 local parser = argparse()
 parser:option("--display -d", "Real X server to connect to. Defaults to DISPLAY environment variable.")
 parser:option("--fakedisplay -D", "Fake X server to host. Defaults to FAKEDISPLAY environment variable, or \":9\" if not set.")
+parser:flag("--block-error", "Don't send errors to clients.")
 local args = parser:parse()
 local socket = require("posix.sys.socket")
 local unistd = require("posix.unistd")
@@ -272,18 +273,25 @@ xpcall(function()
 					return true
 				end
 				if data ~= nil then
-					send(client, data)
 					if data == "\x00" then
-						local code = proxy_card(outbound, client, 8)
+						local code_raw = receive(outbound, 1)
+						local code = string.byte(code_raw)
 						printf("S->C: Error: code: %d (0x%02x)\n", code, code)
-						proxy(outbound, client, 30)
+						local data2 = receive(outbound, 30)
+						if not args.block_error then
+							send(client, data)
+							send(client, code_raw)
+							send(client, data2)
+						end
 					elseif data == "\x01" then
+						send(client, data)
 						proxy(outbound, client, 3)
 						local reply_length = proxy_card(outbound, client, 32)*4
 						proxy(outbound, client, 24)
 						printf("S->C: Reply: reply_length: %d\n", reply_length)
 						proxy(outbound, client, reply_length)
 					else
+						send(client, data)
 						local code = string.byte(data)
 						printf("S->C: Event: code: %d (0x%02x)\n", code, code)
 						proxy(outbound, client, 31)
