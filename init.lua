@@ -3,7 +3,6 @@ local argparse = require("argparse")
 local parser = argparse()
 parser:option("--display -d", "Real X server to connect to. Defaults to DISPLAY environment variable.")
 parser:option("--fakedisplay -D", "Fake X server to host. Defaults to FAKEDISPLAY environment variable, or \":9\" if not set.")
-parser:option("--buffer-size", "Maximum number of bytes to read or write at once.", "1024")
 local args = parser:parse()
 local socket = require("posix.sys.socket")
 local unistd = require("posix.unistd")
@@ -21,7 +20,6 @@ if args.fakedisplay == nil then
 	end
 end
 assert(string.find(args.fakedisplay, "^:%d+$") ~= nil)
-local buffer_size = assert(tonumber(args.buffer_size))
 local outbound = assert(socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0))
 assert(socket.connect(outbound, {
 	family = socket.AF_UNIX,
@@ -240,15 +238,38 @@ xpcall(function()
 				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
 			while true do
-				local data, err, err_code = socket.recv(client, buffer_size)
+				local data, err, err_code = socket.recv(client, 1)
 				if data ~= nil then
-					assert(assert(socket.send(outbound, data)) == #data)
+					assert(#data == 1)
+					send(outbound, data)
+					local opcode = string.byte(data)
+					local padding_1 = proxy(client, outbound, 1)
+					local request_length = proxy_card(client, outbound, 16)*4-4
+					printf("C->S: Request: opcode: %d (0x%02x), request_length: %d\n", opcode, opcode, request_length)
+					assert(request_length >= 0)
+					local data = proxy(client, outbound, request_length)
 				elseif err_code ~= errno.EAGAIN then
 					error(err)
 				end
-				data, err, err_code = socket.recv(outbound, buffer_size)
+				data, err, err_code = socket.recv(outbound, 1)
 				if data ~= nil then
-					assert(assert(socket.send(client, data)) == #data)
+					assert(#data == 1)
+					send(client, data)
+					if data == "\x00" then
+						local code = proxy_card(outbound, client, 8)
+						printf("C->S: Error: code: %d (0x%02x)\n", code, code)
+						proxy(outbound, client, 30)
+					elseif data == "\x01" then
+						proxy(outbound, client, 3)
+						local reply_length = proxy_card(outbound, client, 32)*4
+						proxy(outbound, client, 24)
+						printf("C->S: Reply: reply_length: %d\n", reply_length)
+						proxy(outbound, client, reply_length)
+					else
+						local code = string.byte(data)
+						printf("C->S: Event: code: %d (0x%02x)\n", code, code)
+						proxy(outbound, client, 31)
+					end
 				elseif err_code ~= errno.EAGAIN then
 					error(err)
 				end
