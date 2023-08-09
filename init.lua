@@ -130,6 +130,14 @@ end
 local function pad(n)
 	return (4-(n%4))%4
 end
+local function proxy(inbound, outbound, bytes)
+	local data = receive(inbound, bytes)
+	send(outbound, data)
+	return data
+end
+local function proxy_card(inbound, outbound, bits)
+	return unpack_card(proxy(inbound, outbound, bits/8), bits)
+end
 xpcall(function()
 	while true do
 		local client, client_sockaddr, err_code = socket.accept(inbound)
@@ -200,6 +208,34 @@ xpcall(function()
 				send(client, additional_length_raw)
 				send(client, additional)
 				printf("S->C: Connection setup authenticate: reason: %q\n", reason)
+			elseif status == "\x01" then
+				proxy(outbound, client, 1)
+				local major = proxy_card(outbound, client, 16)
+				local minor = proxy_card(outbound, client, 16)
+				local additional_length = proxy_card(outbound, client, 16)
+				local release_number = proxy_card(outbound, client, 32)
+				local resource_id_base = proxy_card(outbound, client, 32)
+				local resource_id_mask = proxy_card(outbound, client, 32)
+				local motion_buffer_size = proxy_card(outbound, client, 32)
+				local vendor_length = proxy_card(outbound, client, 16)
+				local maximum_request_length = proxy_card(outbound, client, 16)
+				local screen_count = proxy_card(outbound, client, 8)
+				local format_count = proxy_card(outbound, client, 8)
+				local image_byte_order = proxy_card(outbound, client, 8)
+				local bitmap_format_bit_order = proxy_card(outbound, client, 8)
+				local bitmap_format_scanline_unit = proxy_card(outbound, client, 8)
+				local bitmap_format_scanline_pad = proxy_card(outbound, client, 8)
+				local min_keycode = proxy_card(outbound, client, 8)
+				local max_keycode = proxy_card(outbound, client, 8)
+				proxy(outbound, client, 4)
+				local vendor = proxy(outbound, client, vendor_length)
+				proxy(outbound, client, pad(vendor_length))
+				proxy(outbound, client, 8*format_count)
+				-- why is x making me do fucking algebra?
+				local m = (additional_length-8-2*format_count)*4-vendor_length-pad(vendor_length)
+				assert(m%4 == 0)
+				proxy(outbound, client, m)
+				printf("S->C: Connection setup success: major: %d, minor: %d, release_number: %d\n", major, minor, release_number)
 			else
 				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
