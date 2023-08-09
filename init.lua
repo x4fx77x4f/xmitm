@@ -258,8 +258,14 @@ xpcall(function()
 					send(outbound, data)
 					local opcode = string.byte(data)
 					proxy(client, outbound, 1)
-					local request_length = proxy_card(client, outbound, 16)*4-4
+					local request_length_raw = receive(client, 2)
+					local request_length = unpack_card(request_length_raw)*4-4
+					send(outbound, request_length_raw)
+					--print(string.format("%02x %02x", string.byte(request_length_raw, 1, 2)))
 					printf("C->S: Request: opcode: %d (0x%02x), request_length: %d\n", opcode, opcode, request_length)
+					if request_length < 0 then
+						request_length = proxy_card(client, outbound, 32)*4-8
+					end
 					assert(request_length >= 0)
 					proxy(client, outbound, request_length)
 				elseif err_code ~= errno.EAGAIN then
