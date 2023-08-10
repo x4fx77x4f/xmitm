@@ -77,6 +77,11 @@ end
 assert(unpack_card("\xa1", 8) == 0xa1)
 assert(unpack_card("\xa1\xb2", 16) == 0xa1b2)
 assert(unpack_card("\xa1\xb2\xc3\xd4", 32) == 0xa1b2c3d4)
+local function yield()
+	if coroutine.running() ~= nil then
+		return coroutine.yield()
+	end
+end
 local function receive_string(fd)
 	local str, i = {}, 0
 	while true do
@@ -109,6 +114,7 @@ local function send(fd, data)
 		elseif err_code ~= errno.EAGAIN then
 			error(err)
 		end
+		yield()
 	end
 end
 local function receive(fd, n)
@@ -129,6 +135,7 @@ local function receive(fd, n)
 		elseif err_code ~= errno.EAGAIN then
 			error(err)
 		end
+		yield()
 	end
 	return table.concat(data)
 end
@@ -257,12 +264,13 @@ xpcall(function()
 			else
 				printf("S->C: Connection setup unknown 0x%02x\n", string.byte(status))
 			end
-			local function func()
+			local func = coroutine.wrap(function()
+				while true do
 				local data, err, err_code = socket.recv(client, 1)
 				if data ~= nil and #data == 0 then
 					printf("C->S: bad data length (expected 1, got %d)\n", #data)
 					data, err, err_code = nil, "bad data length", errno.EAGAIN
-					return true
+					break
 				end
 				if data ~= nil then
 					send(outbound, data)
@@ -280,13 +288,13 @@ xpcall(function()
 					proxy(client, outbound, request_length)
 				elseif err_code ~= errno.EAGAIN then
 					printf("C->S: Receive failure: err: %q, err_code: %d\n", err, err_code)
-					return true
+					break
 				end
 				data, err, err_code = socket.recv(outbound, 1)
 				if data ~= nil and #data == 0 then
 					printf("S->C: bad data length (expected 1, got %d)\n", #data)
 					data, err, err_code = nil, "bad data length", errno.EAGAIN
-					return true
+					break
 				end
 				if data ~= nil then
 					if data == "\x00" then
@@ -328,10 +336,13 @@ xpcall(function()
 					end
 				elseif err_code ~= errno.EAGAIN then
 					printf("S->C: Receive failure: err: %q, err_code: %d\n", err, err_code)
-					return true
+					break
 				end
 				--print(os.time())
-			end
+				yield()
+				end
+				return true
+			end)
 			clients[#clients+1] = {
 				func = func,
 				client = client,
@@ -355,7 +366,7 @@ xpcall(function()
 				socket.shutdown(data.outbound, socket.SHUT_RDWR)
 				unistd.close(data.client)
 				unistd.close(data.outbound)
-				table.remove(clients, j)
+				table.remove(clients, i)
 			end
 		end
 	end
