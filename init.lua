@@ -5,6 +5,7 @@ parser:option("--display -d", "Real X server to connect to. Defaults to DISPLAY 
 parser:option("--fakedisplay -D", "Fake X server to host. Defaults to FAKEDISPLAY environment variable, or \":9\" if not set.")
 parser:flag("--block-error", "Don't send errors to clients.")
 parser:option("--block-error-code", "Don't send errors of a particular type or types to clients."):count("*")
+parser:flag("--silent", "Don't print anything.")
 local args = parser:parse()
 local socket = require("posix.sys.socket")
 local unistd = require("posix.unistd")
@@ -22,7 +23,11 @@ if args.fakedisplay == nil then
 	end
 end
 assert(string.find(args.fakedisplay, "^:%d+$") ~= nil)
+local silent = args.silent
 local function fprintf(stream, ...)
+	if silent then
+		return
+	end
 	stream:write(string.format(...))
 end
 local function printf(...)
@@ -339,18 +344,19 @@ xpcall(function()
 		for i=1, #clients do
 			local data = clients[i]
 			if data.func() then
-				dead[#dead+1] = i
+				dead[data] = true
 			end
 		end
-		for i=1, #dead do
-			local j = dead[i]
-			local data = clients[j]
-			printf("Shutting down client\n")
-			assert(socket.shutdown(data.client, socket.SHUT_RDWR))
-			assert(socket.shutdown(data.outbound, socket.SHUT_RDWR))
-			assert(unistd.close(data.client))
-			assert(unistd.close(data.outbound))
-			table.remove(clients, j)
+		for i=#clients, 1, -1 do
+			local data = clients[i]
+			if dead[data] then
+				printf("Shutting down client\n")
+				socket.shutdown(data.client, socket.SHUT_RDWR)
+				socket.shutdown(data.outbound, socket.SHUT_RDWR)
+				unistd.close(data.client)
+				unistd.close(data.outbound)
+				table.remove(clients, j)
+			end
 		end
 	end
 end, function(err)
