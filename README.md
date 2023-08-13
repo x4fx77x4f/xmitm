@@ -28,5 +28,3 @@ xmitm implements the [X Generic Event Extension](https://www.x.org/releases/X11R
 To the extent possible under law, the author(s) have dedicated all copyright and related and neighboring rights to this software to the public domain worldwide. This software is distributed without any warranty.
 
 A copy of the CC0 legalcode is in [`./COPYING`](./COPYING).
-
-Attribution is preferred but not required. Commercial use is discouraged but not forbidden.
