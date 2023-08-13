@@ -16,7 +16,7 @@ Created with the intention of working around a crash in the [s&box](https://sbox
 
 ### s&box editor
 3. `./init.lua --block-error-code=3`
-4. Add `DISPLAY=:9 ` to the beginning of your launch options (with `%command%` after if you don't already have it)
+4. Set your Steam launch options for s&box to `DISPLAY=:9 %command%`
 5. Launch s&box editor
 
 ## Extensions
